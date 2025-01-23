@@ -1,4 +1,7 @@
+import * as docker from '@pulumi/docker'
 import * as pulumi from "@pulumi/pulumi";
+
+
 
 // Import the configuration settings for the current stack.
 const config = new pulumi.Config()
@@ -39,4 +42,17 @@ const registryCredentials = containerregistry
       username: creds.username!,
       password: creds.passwords![0].value!,
     }
+  })
+
+  const image = new docker.Image(`${prefixName}-image`, {
+    imageName: pulumi.interpolate`${registry.loginServer}/${imageName}:${imageTag}`,
+    build: {
+      context: appPath,
+      platform: 'linux/amd64',
+    },
+    registry: {
+      server: registry.loginServer,
+      username: registryCredentials.username,
+      password: registryCredentials.password,
+    },
   })
