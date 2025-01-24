@@ -1,6 +1,8 @@
+import * as pulumi from "@pulumi/pulumi"
 import * as containerinstance from '@pulumi/azure-native/containerinstance'
 import * as docker from '@pulumi/docker'
-import * as pulumi from "@pulumi/pulumi";
+import * as resources from '@pulumi/azure-native/resources'
+import * as containerregistry from '@pulumi/azure-native/containerregistry'
 
 
 
@@ -16,9 +18,6 @@ const containerPort = config.requireNumber('containerPort')
 const publicPort = config.requireNumber('publicPort')
 const cpu = config.requireNumber('cpu')
 const memory = config.requireNumber('memory')
-
-import * as resources from '@pulumi/azure-native/resources'
-import * as containerregistry from '@pulumi/azure-native/containerregistry'
 
 // Create a resource group.
 const resourceGroup = new resources.ResourceGroup(`${prefixName}-rg`)
@@ -58,6 +57,7 @@ const registryCredentials = containerregistry
     },
   })
 
+  
   const containerGroup = new containerinstance.ContainerGroup(
     `${prefixName}-container-group`,
     {
@@ -111,3 +111,10 @@ const registryCredentials = containerregistry
       },
     },
   )
+
+// Export the service's IP address, hostname, and fully-qualified URL.
+export const hostname = containerGroup.ipAddress.apply((addr) => addr!.fqdn!)
+export const ip = containerGroup.ipAddress.apply((addr) => addr!.ip!)
+export const url = containerGroup.ipAddress.apply(
+  (addr) => `http://${addr!.fqdn!}:${containerPort}`,
+)
