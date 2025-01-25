@@ -21,6 +21,34 @@ const memory = config.requireNumber('memory')
 // Create a resource group.
 const resourceGroup = new resources.ResourceGroup(`${prefixName}-rg`)
 
+const redis = new cache.Redis(`${prefixName}-redis`, {
+  name: `${prefixName}-weather-cache`,
+  location: 'westus3',
+  resourceGroupName: resourceGroup.name,
+  enableNonSslPort: true,
+  redisVersion: 'Latest',
+  minimumTlsVersion: '1.2',
+  redisConfiguration: {
+    maxmemoryPolicy: 'allkeys-lru',
+  },
+  sku: {
+    name: 'Basic',
+    family: 'C',
+    capacity: 0,
+  },
+})
+
+
+// Extract the auth creds from the deployed Redis service
+const redisAccessKey = cache
+.listRedisKeysOutput({
+name: redis.name,
+resourceGroupName: resourceGroup.name,
+})
+.apply((keys) => keys.primaryKey)
+
+// Construct the Redis connection string to be passed as an environment variable in the app container
+const redisConnectionString = pulumi.interpolate`rediss://:${redisAccessKey}@${redis.hostName}:${redis.sslPort}`
 // Create the container registry.
 const registry = new containerregistry.Registry(`${prefixName}ACR`, {
   resourceGroupName: resourceGroup.name,
@@ -88,6 +116,10 @@ const containerGroup = new containerinstance.ContainerGroup(
               name: 'WEATHER_API_KEY',
               value: config.requireSecret('weatherApiKey'),
             },
+            {
+              name: 'REDIS_URL',
+              value: redisConnectionString,
+            },
           ],
           resources: {
             requests: {
@@ -99,7 +131,7 @@ const containerGroup = new containerinstance.ContainerGroup(
       ],
       ipAddress: {
         type: containerinstance.ContainerGroupIpAddressType.Public,
-        dnsNameLabel: `${imageName}`,
+        dnsNameLabel: pulumi.interpolate`${imageName}-${pulumi.getStack()}-${Math.random().toString(36).substr(2, 5)}`,
         ports: [
           {
             port: publicPort,
@@ -115,29 +147,4 @@ const containerGroup = new containerinstance.ContainerGroup(
     (addr) => `http://${addr!.fqdn!}:${containerPort}`
   );
 
-  // Create a managed Redis service
-const redis = new cache.Redis(`${prefixName}-redis`, {
-    name: `${prefixName}-weather-cache`,
-    location: 'westus3',
-    resourceGroupName: resourceGroup.name,
-    enableNonSslPort: true,
-    redisVersion: 'Latest',
-    minimumTlsVersion: '1.2',
-    redisConfiguration: {
-      maxmemoryPolicy: 'allkeys-lru',
-    },
-    sku: {
-      name: 'Basic',
-      family: 'C',
-      capacity: 0,
-    },
-  })
-  
 
-  // Extract the auth creds from the deployed Redis service
-const redisAccessKey = cache
-.listRedisKeysOutput({
-  name: redis.name,
-  resourceGroupName: resourceGroup.name,
-})
-.apply((keys) => keys.primaryKey)
