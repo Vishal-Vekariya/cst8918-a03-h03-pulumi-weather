@@ -3,6 +3,7 @@ import * as docker from '@pulumi/docker'
 import * as resources from '@pulumi/azure-native/resources';
 import * as containerregistry from '@pulumi/azure-native/containerregistry';
 import * as containerinstance from '@pulumi/azure-native/containerinstance';
+import * as cache from '@pulumi/azure-native/cache'
 
 // Import the configuration settings for the current stack.
 const config = new pulumi.Config()
@@ -113,3 +114,30 @@ const containerGroup = new containerinstance.ContainerGroup(
   export const url = containerGroup.ipAddress.apply(
     (addr) => `http://${addr!.fqdn!}:${containerPort}`
   );
+
+  // Create a managed Redis service
+const redis = new cache.Redis(`${prefixName}-redis`, {
+    name: `${prefixName}-weather-cache`,
+    location: 'westus3',
+    resourceGroupName: resourceGroup.name,
+    enableNonSslPort: true,
+    redisVersion: 'Latest',
+    minimumTlsVersion: '1.2',
+    redisConfiguration: {
+      maxmemoryPolicy: 'allkeys-lru',
+    },
+    sku: {
+      name: 'Basic',
+      family: 'C',
+      capacity: 0,
+    },
+  })
+  
+
+  // Extract the auth creds from the deployed Redis service
+const redisAccessKey = cache
+.listRedisKeysOutput({
+  name: redis.name,
+  resourceGroupName: resourceGroup.name,
+})
+.apply((keys) => keys.primaryKey)
